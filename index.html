@@ -27,6 +27,10 @@
   .full{width:100%;margin-top:20px}
   .err{color:var(--err);font-size:.9rem;margin-top:12px;min-height:1.2em}
   .hidden{display:none!important}
+  .admin-row{margin-top:18px;padding-top:14px;border-top:1px solid var(--border);text-align:center}
+  .admin-link{display:inline-block;padding:8px 16px;border:1px solid var(--border);border-radius:10px;color:var(--muted);font-size:.9rem;font-weight:600;text-decoration:none}
+  .admin-link:hover{color:var(--text);border-color:var(--primary)}
+  .admin-link:focus-visible{outline:2px solid var(--primary);outline-offset:2px}
 
   /* Pemutar video */
   .player-box{position:relative;width:100%;aspect-ratio:16/9;background:#000;border-radius:14px;overflow:hidden}
@@ -67,6 +71,11 @@
     <input id="sekolah" placeholder="Nama sekolah">
     <button id="btnMulai" class="full" disabled>Mulai Video</button>
     <div id="formErr" class="err"></div>
+
+    <!-- Tombol Admin (untuk guru) -->
+    <div class="admin-row">
+      <a class="admin-link" href="https://castpod04-code.github.io/admin-vidyoutube/" target="_blank" rel="noopener">Admin (untuk guru)</a>
+    </div>
   </div>
 
   <!-- 2. VIDEO -->
