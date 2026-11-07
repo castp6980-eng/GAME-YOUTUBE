@@ -1,0 +1,284 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="referrer" content="strict-origin-when-cross-origin">
+<title>Kuis Video Interaktif</title>
+<style>
+  :root{
+    --bg:#f4f6fb; --card:#ffffff; --text:#1f2430; --muted:#667085;
+    --primary:#3b6df0; --primary-text:#ffffff; --border:#d9dfeb; --ok:#1a9b57; --err:#d92d20;
+  }
+  @media (prefers-color-scheme: dark){
+    :root{ --bg:#12151c; --card:#1b202b; --text:#eef1f7; --muted:#9aa4b8; --border:#2c3342; --primary:#6b93ff; --primary-text:#0d1220; }
+  }
+  *{box-sizing:border-box}
+  body{margin:0;font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;background:var(--bg);color:var(--text);min-height:100vh;display:flex;justify-content:center;padding:16px}
+  .wrap{width:100%;max-width:860px}
+  .card{background:var(--card);border:1px solid var(--border);border-radius:16px;padding:24px}
+  h1{font-size:1.4rem;margin:0 0 4px}
+  p.sub{color:var(--muted);margin:0 0 20px}
+  label{display:block;font-weight:600;margin:14px 0 6px;font-size:.92rem}
+  input,select{width:100%;padding:12px 14px;border:1px solid var(--border);border-radius:10px;font-size:1rem;background:transparent;color:var(--text)}
+  input:focus,select:focus{outline:2px solid var(--primary);border-color:transparent}
+  button{font:inherit;cursor:pointer;border:0;border-radius:10px;padding:12px 20px;background:var(--primary);color:var(--primary-text);font-weight:600}
+  button:disabled{opacity:.45;cursor:not-allowed}
+  .full{width:100%;margin-top:20px}
+  .err{color:var(--err);font-size:.9rem;margin-top:12px;min-height:1.2em}
+  .hidden{display:none!important}
+
+  /* Pemutar video */
+  .player-box{position:relative;width:100%;aspect-ratio:16/9;background:#000;border-radius:14px;overflow:hidden}
+  .player-box iframe,.player-box #player{position:absolute;inset:0;width:100%;height:100%;border:0}
+  /* Lapisan pemblokir klik pada iframe */
+  .shield{position:absolute;inset:0;z-index:2;background:transparent}
+  .layer{position:absolute;inset:0;z-index:3;display:flex;align-items:center;justify-content:center;padding:14px;background:rgba(10,14,25,.94);overflow:auto}
+  .q-card{width:100%;max-width:620px;color:#eef1f7}
+  .q-meta{font-size:.85rem;color:#9fb0d6;margin-bottom:8px}
+  .q-text{font-size:1.15rem;font-weight:600;margin-bottom:14px;line-height:1.4}
+  .opt{display:flex;gap:10px;align-items:flex-start;width:100%;text-align:left;margin-bottom:8px;background:#242b3b;color:#eef1f7;border:2px solid transparent;font-weight:500}
+  .opt b{min-width:1.4em}
+  .opt.sel{border-color:#6b93ff;background:#2c3a5e}
+  .status{margin-top:12px;color:var(--muted);font-size:.9rem;text-align:center}
+  .score-big{font-size:3.4rem;font-weight:800;color:var(--primary);text-align:center;margin:10px 0}
+  .center{text-align:center}
+  @media (max-width:520px){ .card{padding:18px} .q-text{font-size:1.02rem} }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <!-- 1. FORM DATA DIRI -->
+  <div id="screenForm" class="card">
+    <h1>Kuis Video Interaktif</h1>
+    <p class="sub">Isi data diri terlebih dahulu sebelum video dimulai.</p>
+    <label for="pilihVideo">Pilih Video</label>
+    <select id="pilihVideo" disabled><option>Memuat daftar video...</option></select>
+    <label for="nama">Nama</label>
+    <input id="nama" autocomplete="name" placeholder="Nama lengkap">
+    <label for="kelas">Kelas</label>
+    <input id="kelas" placeholder="Contoh: 8A">
+    <label for="sekolah">Sekolah</label>
+    <input id="sekolah" placeholder="Nama sekolah">
+    <button id="btnMulai" class="full" disabled>Mulai Video</button>
+    <div id="formErr" class="err"></div>
+  </div>
+
+  <!-- 2. VIDEO -->
+  <div id="screenVideo" class="hidden">
+    <div class="player-box" id="playerBox">
+      <div id="player"></div>
+      <div class="shield"></div>
+
+      <!-- Muncul bila video berhenti bukan karena soal -->
+      <div id="layerResume" class="layer hidden">
+        <button id="btnResume">▶ Lanjutkan</button>
+      </div>
+
+      <!-- Soal -->
+      <div id="layerQuestion" class="layer hidden">
+        <div class="q-card">
+          <div class="q-meta" id="qMeta"></div>
+          <div class="q-text" id="qText"></div>
+          <div id="qOpts"></div>
+          <button id="btnJawab" class="full" disabled>Kirim Jawaban</button>
+        </div>
+      </div>
+
+      <!-- Hasil -->
+      <div id="layerResult" class="layer hidden">
+        <div class="q-card center">
+          <div id="resultBody"></div>
+        </div>
+      </div>
+    </div>
+    <div class="status" id="statusBar"></div>
+  </div>
+</div>
+
+<script src="https://www.youtube.com/iframe_api"></script>
+<script>
+/* ============ KONFIGURASI ============ */
+const EXEC_URL = 'https://script.google.com/macros/s/AKfycbwA6PNQDpOvC4k9IAOOdIHSNTlm_tszjLXZ50thTjKPju6J8zaeTTP-PVMLHD7Mi-jf/exec';
+// Daftar video & link YouTube diatur di spreadsheet (sheet "Video"), soal di sheet "Soal"
+/* ===================================== */
+
+const $ = id => document.getElementById(id);
+let player, questions = [], queue = [], answers = [];
+let questionActive = false, finished = false, maxT = 0, startedAt = 0, timer = null;
+let biodata = {}, videoUrl = "", videoInfo = null;
+
+// Promise agar aman walau API YouTube selesai dimuat sebelum/sesudah klik
+const ytReady = new Promise(res => {
+  if (window.YT && YT.Player) return res();
+  window.onYouTubeIframeAPIReady = res;
+});
+
+/* ---------- Muat daftar video ---------- */
+(async function muatDaftar(){
+  const sel = $('pilihVideo');
+  try{
+    const d = await (await fetch(EXEC_URL + '?action=video')).json();
+    if (!d.ok || !d.videos.length) throw new Error('Belum ada video di spreadsheet');
+    sel.innerHTML = '';
+    d.videos.forEach(v => { const o = document.createElement('option'); o.value = v.kode; o.textContent = v.judul; sel.appendChild(o); });
+    sel.disabled = false; $('btnMulai').disabled = false;
+  }catch(e){
+    sel.innerHTML = '<option>Gagal memuat</option>';
+    $('formErr').textContent = 'Gagal memuat daftar video: ' + e.message;
+  }
+})();
+
+function getVideoId(url){
+  const m = url.match(/(?:v=|youtu\.be\/|embed\/|shorts\/)([\w-]{11})/);
+  return m ? m[1] : url;
+}
+
+/* ---------- Mulai ---------- */
+$('btnMulai').addEventListener('click', async () => {
+  const nama = $('nama').value.trim(), kelas = $('kelas').value.trim(), sekolah = $('sekolah').value.trim();
+  $('formErr').textContent = '';
+  if (!nama || !kelas || !sekolah){ $('formErr').textContent = 'Nama, kelas, dan sekolah wajib diisi.'; return; }
+  biodata = { nama, kelas, sekolah, video: $('pilihVideo').value };
+
+  $('btnMulai').disabled = true; $('btnMulai').textContent = 'Memuat soal...';
+  try{
+    const r = await fetch(EXEC_URL + '?action=soal&video=' + encodeURIComponent(biodata.video));
+    const d = await r.json();
+    if (!d.ok) throw new Error(d.error || 'Gagal memuat soal');
+    if (!d.video || !d.video.url || d.video.url.indexOf('GANTI_ID_VIDEO') > -1) throw new Error('Link YouTube video ini belum diisi di sheet Video');
+    videoInfo = d.video; videoUrl = d.video.url;
+    questions = d.soal; queue = questions.slice();
+  }catch(e){
+    $('formErr').textContent = 'Gagal memuat soal: ' + e.message;
+    $('btnMulai').disabled = false; $('btnMulai').textContent = 'Mulai Video';
+    return;
+  }
+
+  $('screenForm').classList.add('hidden');
+  $('screenVideo').classList.remove('hidden');
+  await ytReady;
+  if (location.protocol === 'file:'){
+    alert('Halaman ini dibuka dari file lokal, sehingga YouTube menolak memutar video (Error 153). Upload index.html ke hosting https (GitHub Pages, Netlify, dsb.) lalu buka lewat link-nya.');
+  }
+  startedAt = Date.now();
+  player = new YT.Player('player', {
+    videoId: getVideoId(videoUrl),
+    playerVars: { controls:0, disablekb:1, fs:0, modestbranding:1, rel:0, iv_load_policy:3, playsinline:1, autoplay:1, cc_load_policy:0, origin: location.origin, widget_referrer: location.href },
+    events: { onReady: e => { e.target.playVideo(); timer = setInterval(tick, 250); }, onStateChange }
+  });
+});
+
+/* ---------- Pemantau waktu ---------- */
+function tick(){
+  if (!player || !player.getCurrentTime || questionActive || finished) return;
+  const t = player.getCurrentTime();
+
+  // Cegah loncat maju (anti-skip)
+  if (t > maxT + 2){ player.seekTo(maxT, true); return; }
+  if (t > maxT) maxT = t;
+
+  if (queue.length && t >= queue[0].waktu && player.getPlayerState() === YT.PlayerState.PLAYING){
+    questionActive = true;
+    player.pauseVideo();
+    tampilSoal(queue[0], () => {
+      queue.shift();
+      questionActive = false;
+      player.playVideo();
+    });
+  }
+  const sisa = queue.length;
+  $('statusBar').textContent = sisa ? ('Soal tersisa: ' + sisa) : 'Semua soal sudah muncul';
+}
+
+function onStateChange(e){
+  const S = YT.PlayerState;
+  if (e.data === S.PLAYING){
+    $('layerResume').classList.add('hidden');
+    if (questionActive) player.pauseVideo();   // video tidak boleh jalan saat soal aktif
+  }
+  if (e.data === S.PAUSED && !questionActive && !finished){
+    $('layerResume').classList.remove('hidden');
+  }
+  if (e.data === S.ENDED && !finished && !questionActive){
+    // Soal yang waktunya melewati durasi video tetap harus dijawab
+    kosongkanAntrian();
+  }
+}
+$('btnResume').addEventListener('click', () => player.playVideo());
+
+function kosongkanAntrian(){
+  if (!queue.length) return selesai();
+  questionActive = true;
+  tampilSoal(queue[0], () => { queue.shift(); kosongkanAntrian(); });
+}
+
+/* ---------- Tampilan soal ---------- */
+function tampilSoal(q, done){
+  const idx = questions.findIndex(x => x.id === q.id) + 1;
+  $('qMeta').textContent = 'Soal ' + idx + ' dari ' + questions.length;
+  $('qText').textContent = q.tanya;
+  const box = $('qOpts'); box.innerHTML = '';
+  let pilihan = null;
+  const btnJawab = $('btnJawab'); btnJawab.disabled = true;
+
+  Object.keys(q.opsi).forEach(h => {
+    const b = document.createElement('button');
+    b.className = 'opt';
+    const l = document.createElement('b'); l.textContent = h + '.';
+    const s = document.createElement('span'); s.textContent = q.opsi[h];
+    b.append(l, s);
+    b.onclick = () => {
+      pilihan = h;
+      box.querySelectorAll('.opt').forEach(x => x.classList.remove('sel'));
+      b.classList.add('sel'); btnJawab.disabled = false;
+    };
+    box.appendChild(b);
+  });
+
+  btnJawab.onclick = () => {
+    if (!pilihan) return;
+    answers.push({ id: q.id, jawaban: pilihan });
+    $('layerQuestion').classList.add('hidden');
+    done();
+  };
+  $('layerQuestion').classList.remove('hidden');
+}
+
+/* ---------- Selesai & kirim skor ---------- */
+async function selesai(){
+  finished = true; clearInterval(timer);
+  $('layerQuestion').classList.add('hidden');
+  $('layerResume').classList.add('hidden');
+  kirimSkor();
+}
+
+async function kirimSkor(){
+  const body = $('resultBody');
+  $('layerResult').classList.remove('hidden');
+  body.innerHTML = '<p>Mengirim nilai...</p>';
+  try{
+    const r = await fetch(EXEC_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+      body: JSON.stringify({ ...biodata, jawaban: answers, durasi: Math.round((Date.now()-startedAt)/1000) })
+    });
+    const d = await r.json();
+    if (!d.ok) throw new Error(d.error || 'Gagal menyimpan');
+    body.innerHTML = '';
+    const h = document.createElement('h2'); h.textContent = 'Selesai, ' + biodata.nama + '!';
+    const sk = document.createElement('div'); sk.className = 'score-big'; sk.textContent = d.skor;
+    const p = document.createElement('p'); p.textContent = 'Benar ' + d.benar + ' dari ' + d.total + ' soal. Nilai kamu sudah tersimpan.';
+    const lagi = document.createElement('button'); lagi.textContent = 'Pilih Video Lain'; lagi.onclick = () => location.reload();
+    body.append(h, sk, p, lagi);
+  }catch(e){
+    body.innerHTML = '';
+    const p = document.createElement('p'); p.textContent = 'Nilai gagal dikirim: ' + e.message;
+    const b = document.createElement('button'); b.textContent = 'Kirim Ulang'; b.onclick = kirimSkor;
+    body.append(p, b);
+  }
+}
+</script>
+</body>
+</html>
